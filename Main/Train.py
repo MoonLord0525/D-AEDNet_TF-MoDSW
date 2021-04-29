@@ -9,29 +9,40 @@ import torch.optim as optim
 import Dataset.DataLoader
 import Dataset.DataReader
 import Model.DeepSNR
+import Model.D_AEDNet
 
-FeatureMatrix, DenseLabel = Dataset.DataReader.DataReader(TFName='CTCF', DataSetName='ChIP-exo')
+'''
+    Initialization as follows:
+'''
+TFsName = 'CTCF'
+DataSetName = 'ChIP-exo'
+NeuralNetworkName = 'DeepSNR'
+'''
+    Initialization End    
+'''
+
+'''
+    Main Process as follows: 
+'''
+FeatureMatrix, DenseLabel = Dataset.DataReader.DataReader(TFName=TFsName, DataSetName=DataSetName)
 FeatureMatrix, DenseLabel = np.array(FeatureMatrix), np.array(DenseLabel)
 
 CrossFold = sklearn.model_selection.KFold(n_splits=5)
+CurrentFold = 1
 
 LossFunction = nn.BCELoss()
 
 MaxEpoch = 1
 
-ThresholdValue = 0.5
-
 for TrainIndex, TestIndex in CrossFold.split(FeatureMatrix):
-    NeuralNetwork = Model.DeepSNR.DeepSNR(SequenceLength=100, MotifLength=15)
+    if NeuralNetworkName == 'DeepSNR':
+        NeuralNetwork = Model.DeepSNR.DeepSNR(SequenceLength=100, MotifLength=15)
+    else:
+        NeuralNetwork = Model.D_AEDNet.D_AEDNN(SequenceLength=100)
     optimizer = optim.Adam(NeuralNetwork.parameters())
     TrainFeatureMatrix = torch.tensor(FeatureMatrix[TrainIndex], dtype=torch.float32).unsqueeze(dim=1)
     TrainDenseLabels = torch.tensor(DenseLabel[TrainIndex])
-    TestFeatureMatrix = torch.tensor(FeatureMatrix[TestIndex], dtype=torch.float32).unsqueeze(dim=1)
-    TestDenseLabels = torch.tensor(DenseLabel[TestIndex])
-    TrainLoader = Dataset.DataLoader.SampleLoader(FeatureMatrix=TrainFeatureMatrix, DenseLabel=TrainDenseLabels,
-                                                  BatchSize=32)
-    TestLoader = Dataset.DataLoader.SampleLoader(FeatureMatrix=TestFeatureMatrix, DenseLabel=TestDenseLabels,
-                                                 BatchSize=8)
+    TrainLoader = Dataset.DataLoader.SampleLoader(FeatureMatrix=TrainFeatureMatrix, DenseLabel=TrainDenseLabels, BatchSize=32)
 
     for Epoch in range(MaxEpoch):
         NeuralNetwork.train()
@@ -44,5 +55,6 @@ for TrainIndex, TestIndex in CrossFold.split(FeatureMatrix):
             Loss = LossFunction(Prediction.squeeze(), Y.to(torch.float32))
             Loss.backward()
             optimizer.step()
-    torch.save(NeuralNetwork.state_dict(), 'Weight/CTCF.pth')
+    torch.save(NeuralNetwork.state_dict(), 'Weight/' + NeuralNetworkName + DataSetName + TFsName + '%dFold.pth' % CurrentFold)
+    CurrentFold = CurrentFold + 1
 print('Finished Training')
